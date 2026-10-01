@@ -358,7 +358,8 @@ $(function() {
 		}, beforeId);
 	}
 
-	// Region selection: a rectangle, a free polygon, or a line with a radius (a corridor)
+	// Region selection: any number of shapes. Each is a rectangle, a free polygon, or a line with
+	// a radius (a corridor), and the selection is every tile that touches at least one of them
 
 	var DRAW_MODES = {
 		draw_rectangle: { button: "#rectangle-draw-button", hint: "Click two corners on the map to draw a rectangle." },
@@ -394,26 +395,72 @@ $(function() {
 		map.on('draw.update', onRegionChanged);
 		map.on('draw.delete', onRegionChanged);
 		map.on('draw.modechange', updateRegionTools);
+		map.on('draw.selectionchange', updateRegionTools);
+
+		// mapbox-gl-draw only handles Delete when its own trash button is shown, and its
+		// toolbar is hidden here, so remove selected shapes from the keyboard ourselves
+		map.getCanvas().addEventListener("keydown", function(e) {
+			if((e.key == "Delete" || e.key == "Backspace") && draw.getSelectedIds().length > 0) {
+				e.preventDefault();
+				removeSelectedShapes();
+			}
+		});
 
 		$("#rectangle-draw-button").click(function() { startDrawing("draw_rectangle"); });
 		$("#polygon-draw-button").click(function() { startDrawing("draw_polygon"); });
 		$("#line-draw-button").click(function() { startDrawing("draw_line_string"); });
 		$("#use-view-button").click(useCurrentView);
+		$("#clear-region-button").click(clearShapes);
+		$("#remove-shape-button").click(removeSelectedShapes);
 
+		// Remember the radius from before editing, so leaving the field empty restores it
+		$("#radius-box").on("focus", function() {
+			lastValidRadius = getRadius() || lastValidRadius;
+		});
 		$("#radius-box").on("input", onRegionChanged);
 		$("#radius-box").on("change", function() {
-			clampInput($(this), MIN_RADIUS, MAX_RADIUS);
+			if($(this).val().trim() == "") {
+				$(this).val(lastValidRadius).trigger("input");
+			} else {
+				clampInput($(this), MIN_RADIUS, MAX_RADIUS);
+				lastValidRadius = getRadius() || lastValidRadius;
+			}
 		});
 	}
 
+	var lastValidRadius = 100;
+
+	// True once a line has been drawn, whether or not its radius is valid yet
+	function hasDrawnLine() {
+		return draw != null && draw.getAll().features.some(function(feature) {
+			return feature.geometry.type == "LineString" && feature.geometry.coordinates.length >= 2;
+		});
+	}
+
+	var RADIUS_HINT = "Enter a radius from " + MIN_RADIUS + " to " + MAX_RADIUS.toLocaleString() + " metres.";
+
 	function startDrawing(mode) {
 		removeGrid();
-		draw.deleteAll();
 		draw.changeMode(mode);
 		onRegionChanged();
 
+		var hint = DRAW_MODES[mode].hint;
+		if(draw.getAll().features.length > 0) {
+			hint += " It is added to your selection.";
+		}
+
 		M.Toast.dismissAll();
-		M.toast({html: DRAW_MODES[mode].hint, displayLength: 7000})
+		M.toast({html: hint, displayLength: 7000})
+	}
+
+	function clearShapes() {
+		draw.deleteAll();
+		onRegionChanged();
+	}
+
+	function removeSelectedShapes() {
+		draw.delete(draw.getSelectedIds());
+		onRegionChanged();
 	}
 
 	// Highlight the tool being drawn with, and show the radius field for lines
@@ -425,7 +472,9 @@ $(function() {
 			$(DRAW_MODES[key].button).toggleClass("active", mode == key);
 		});
 
-		$("#radius-field").toggle(mode == "draw_line_string" || (region != null && region.kind == "line"));
+		$("#radius-field").toggle(mode == "draw_line_string" || hasDrawnLine());
+		$("#clear-region-button").toggle(draw != null && draw.getAll().features.length > 0);
+		$("#remove-shape-button").toggle(draw != null && draw.getSelectedIds().length > 0);
 	}
 
 	function useCurrentView() {
@@ -435,7 +484,6 @@ $(function() {
 		var south = Math.max(bounds.getSouth(), -85.05);
 		var north = Math.min(bounds.getNorth(), 85.05);
 
-		draw.deleteAll();
 		draw.add({
 			type: "Feature",
 			properties: {},
@@ -456,21 +504,41 @@ $(function() {
 		return value;
 	}
 
+	// The selection as { shapes, bounds }, or null when nothing usable is drawn. Lines with an
+	// invalid radius make the whole selection null, so nothing downloads with a wrong corridor
 	function getRegion() {
 		if(!draw) {
 			return null;
 		}
 
-		var feature = draw.getAll().features[0];
-		if(!feature) {
+		var radius = getRadius();
+		if(radius === null && hasDrawnLine()) {
 			return null;
 		}
 
-		// While a shape is being drawn, draw holds it unfinished; it counts once it has an extent
+		var shapes = draw.getAll().features.map(function(feature) {
+			return toShape(feature, radius);
+		}).filter(function(shape) {
+			return shape != null;
+		});
+
+		if(shapes.length == 0) {
+			return null;
+		}
+
+		var bounds = new maplibregl.LngLatBounds(shapes[0].bounds.getSouthWest(), shapes[0].bounds.getNorthEast());
+		shapes.forEach(function(shape) {
+			bounds.extend(shape.bounds);
+		});
+
+		return { shapes: shapes, bounds: bounds };
+	}
+
+	// While a shape is being drawn, draw holds it unfinished; it counts once it has an extent
+	function toShape(feature, radius) {
 		if(feature.geometry.type == "LineString") {
 			var line = feature.geometry.coordinates;
-			var radius = getRadius();
-			if(line.length < 2 || radius === null || lineLengthKm(line) == 0) {
+			if(line.length < 2 || lineLengthKm(line) == 0) {
 				return null;
 			}
 
@@ -545,40 +613,55 @@ $(function() {
 		}
 
 		var region = getRegion();
-		if(!region || region.kind != "line") {
-			source.setData(emptyCollection());
-			return;
-		}
+		var lines = region ? region.shapes.filter(function(shape) { return shape.kind == "line"; }) : [];
 
-		source.setData(turf.buffer(turf.lineString(region.line), region.radius, { units: "meters", steps: 16 }));
+		source.setData({
+			type: "FeatureCollection",
+			features: lines.map(function(shape) {
+				return turf.buffer(turf.lineString(shape.line), shape.radius, { units: "meters", steps: 16 });
+			}),
+		});
 	}
 
 	function updateRegionInfo() {
 		var region = getRegion();
 
 		if(!region) {
-			$("#region-info").text("No region selected yet.");
+			$("#region-info").text(hasDrawnLine() && getRadius() === null ? RADIUS_HINT : "No region selected yet.");
 			return;
 		}
 
 		var bounds = region.bounds;
 		var center = bounds.getCenter();
 		var place = " around " + center.lat.toFixed(4) + ", " + center.lng.toFixed(4);
+		var width = distanceKm(bounds.getWest(), center.lat, bounds.getEast(), center.lat);
+		var height = distanceKm(center.lng, bounds.getSouth(), center.lng, bounds.getNorth());
+		var size = "<b>" + formatKm(width) + " × " + formatKm(height) + "</b>";
 
-		if(region.kind == "line") {
+		if(region.shapes.length > 1) {
+			var counts = { rectangle: 0, polygon: 0, line: 0 };
+			region.shapes.forEach(function(shape) {
+				counts[shape.kind == "line" ? "line" : shape.isRectangle ? "rectangle" : "polygon"]++;
+			});
+			var parts = Object.keys(counts).filter(function(kind) { return counts[kind] > 0; }).map(function(kind) {
+				return counts[kind] + " " + kind + (counts[kind] > 1 ? "s" : "");
+			});
+
 			$("#region-info").html(
-				"<b>" + formatKm(lineLengthKm(region.line)) + " line</b>, " + formatMeters(region.radius) + " either side," + place +
-				"<br/>Click the line to move or reshape it, or draw again to replace it."
+				"<b>" + region.shapes.length + " shapes</b> (" + parts.join(", ") + ") spanning " + size + place +
+				"<br/>Draw another to add it. Click a shape to select it, then press Delete or Remove selected."
 			);
 			return;
 		}
 
-		var width = distanceKm(bounds.getWest(), center.lat, bounds.getEast(), center.lat);
-		var height = distanceKm(center.lng, bounds.getSouth(), center.lng, bounds.getNorth());
+		var shape = region.shapes[0];
+		var description = shape.kind == "line"
+			? "<b>" + formatKm(lineLengthKm(shape.line)) + " line</b>, " + formatMeters(shape.radius) + " either side,"
+			: (shape.isRectangle ? "" : "Polygon spanning ") + size;
 
 		$("#region-info").html(
-			(region.isRectangle ? "" : "Polygon spanning ") + "<b>" + formatKm(width) + " × " + formatKm(height) + "</b>" + place +
-			"<br/>Click it to move or reshape it, or draw again to replace it."
+			description + place +
+			"<br/>Click it to move or reshape it. Draw another shape to add it to the selection."
 		);
 	}
 
@@ -870,44 +953,83 @@ $(function() {
 		}
 	}
 
+	// Every tile touching at least one shape, each tile once even where shapes overlap
 	function getGrid(region, zoom) {
+		var size = Math.pow(2, zoom);
+		var tiles = new Map();
 
-		if(region.kind == "line") {
-			var corridor = new Map();
-			addTilesNearLine(corridor, region.line, region.radius, zoom);
-			return Array.from(corridor.values());
+		region.shapes.forEach(function(shape) {
+			addShapeTiles(tiles, shape, zoom, size);
+		});
+
+		return Array.from(tiles.values());
+	}
+
+	function addShapeTiles(tiles, shape, zoom, size) {
+
+		if(shape.kind == "line") {
+			addTilesNearLine(tiles, shape.line, shape.radius, zoom);
+			return;
 		}
 
-		if(!region.isRectangle) {
+		if(!shape.isRectangle) {
 			// A tile overlaps a polygon if the outline passes through it or its centre is inside
-			var rings = region.feature.geometry.coordinates;
-			var polygon = new Map();
+			var rings = shape.feature.geometry.coordinates;
 			rings.forEach(function(ring) {
-				addTilesNearLine(polygon, ring, 0, zoom);
+				addTilesNearLine(tiles, ring, 0, zoom);
 			});
-			addTilesInsidePolygon(polygon, rings, zoom);
-			return Array.from(polygon.values());
+			addTilesInsidePolygon(tiles, rings, zoom);
+			return;
 		}
 
-		var range = getTileRange(region.bounds, zoom);
-		var tiles = [];
-
+		var range = getTileRange(shape.bounds, zoom);
 		for(var y = range.top; y <= range.bottom; y++) {
 			for(var x = range.left; x <= range.right; x++) {
-				tiles.push({ x: x, y: y, z: zoom });
+				tiles.set(y * size + x, { x: x, y: y, z: zoom });
 			}
 		}
-
-		return tiles;
 	}
 
 	function countTiles(region, zoom) {
-		if(!region.isRectangle) {
+		var allRectangles = region.shapes.every(function(shape) { return shape.isRectangle; });
+		if(!allRectangles) {
 			return getGrid(region, zoom).length;
 		}
 
-		var range = getTileRange(region.bounds, zoom);
-		return (range.right - range.left + 1) * (range.bottom - range.top + 1);
+		return countRectangleUnion(region.shapes.map(function(shape) {
+			return getTileRange(shape.bounds, zoom);
+		}));
+	}
+
+	// Tiles covered by a set of tile ranges, counting overlaps once. Sweeps the columns between
+	// rectangle edges, so it costs nothing like enumerating the tiles themselves
+	function countRectangleUnion(ranges) {
+		var edges = [];
+		ranges.forEach(function(r) {
+			edges.push(r.left, r.right + 1);
+		});
+		edges = Array.from(new Set(edges)).sort(function(a, b) { return a - b; });
+
+		var total = 0;
+		for(var i = 0; i + 1 < edges.length; i++) {
+			var spans = ranges.filter(function(r) {
+				return r.left <= edges[i] && r.right + 1 >= edges[i + 1];
+			}).map(function(r) {
+				return [r.top, r.bottom + 1];
+			}).sort(function(a, b) { return a[0] - b[0]; });
+
+			var covered = 0, end = -Infinity;
+			spans.forEach(function(span) {
+				var start = Math.max(span[0], end);
+				if(span[1] > start) {
+					covered += span[1] - start;
+				}
+				end = Math.max(end, span[1]);
+			});
+
+			total += covered * (edges[i + 1] - edges[i]);
+		}
+		return total;
 	}
 
 	function getAllGridTiles(region, zoomRange) {
@@ -956,7 +1078,12 @@ $(function() {
 		}
 
 		if(!region) {
-			summary.text("Draw a region to see how many tiles it covers.");
+			if(hasDrawnLine() && getRadius() === null) {
+				summary.text(RADIUS_HINT);
+				summary.addClass("warn");
+			} else {
+				summary.text("Draw a region to see how many tiles it covers.");
+			}
 			button.prop("disabled", true);
 			return;
 		}
@@ -1895,6 +2022,7 @@ $(function() {
 	}
 
 	initializeSettings();
+	lastValidRadius = getRadius() || lastValidRadius;
 	initializeSources();
 	initializeMaterialize();
 	initializeMap();

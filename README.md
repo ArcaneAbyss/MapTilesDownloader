@@ -53,7 +53,7 @@ I design map related things as a hobby, and often I have to work with offline ma
 ## Features
 
 - Super easy to use map UI to select region and options
-- Select a rectangle, a free-form polygon, or a corridor along a line with a radius
+- Select any mix of rectangles, free-form polygons and corridors along a line with a radius
 - Multi-threading to download tiles in parallel, with automatic rate limiting for large downloads
 - Cross platform, use any OS as long as it has Python and a browser
 - Dockerfile available for easy setup
@@ -98,7 +98,9 @@ The following providers are available from the dropdown and have been verified w
 | Line | Click points along a route and double-click to finish, then set **Radius** (metres). Every tile within that distance of the line is downloaded, shown as a shaded corridor |
 | Map view | The area currently on screen |
 
-Click a drawn shape to move it or drag its points. Only tiles that actually touch the shape are downloaded, so a polygon or corridor costs far fewer tiles than its bounding box.
+Each shape you draw is added to the selection, so you can combine several rectangles, polygons and lines in one download. Tiles where shapes overlap are downloaded once. Click a shape to move it or drag its points; with a shape selected, press Delete or **Remove selected** to drop it, or use **Clear all shapes** to start over. The radius applies to every line.
+
+Only tiles that actually touch a shape are downloaded, so a polygon or corridor costs far fewer tiles than its bounding box. Stitching still produces one image covering all the shapes, with black where nothing was selected.
 
 ## Zoom Levels
 
