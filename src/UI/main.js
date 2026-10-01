@@ -59,7 +59,7 @@ $(function() {
 					source: 'osm'
 				}]
 			},
-			center: [-73.983652, 40.755024],
+			center: [103.8198, 1.3521],
 			zoom: 12
 		});
 
@@ -134,7 +134,7 @@ $(function() {
 			} else if(outputType == "repo") {
 				outputFileBox.val("tiles.repo")
 			} else if(outputType == "directory") {
-				outputFileBox.val("{z}/{x}/{y}.png")
+				outputFileBox.val("{z}/{x}/{y}.jpg")
 			}
 			updateStitchCheckboxState();
 		})
@@ -475,7 +475,7 @@ $(function() {
 			$(currentImages[i]).remove();
 		}
 
-		var image = $("<img/>").attr('src', "data:image/png;base64, " + base64)
+		var image = $("<img/>").attr('src', "data:image/jpeg;base64, " + base64)
 
 		var strip = $(".tile-strip");
 		strip.prepend(image)

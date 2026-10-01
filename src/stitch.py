@@ -10,7 +10,7 @@ class Stitcher:
         if not os.path.isdir(zoom_dir):
             return None
 
-        all_tiles = []
+        tile_paths = {}
         for x_name in os.listdir(zoom_dir):
             x_path = os.path.join(zoom_dir, x_name)
             if not os.path.isdir(x_path):
@@ -20,12 +20,14 @@ class Stitcher:
             except ValueError:
                 continue
             for y_file in os.listdir(x_path):
-                if y_file.endswith('.png'):
+                name, ext = os.path.splitext(y_file)
+                if ext.lower() in ('.jpg', '.jpeg', '.png'):
                     try:
-                        y = int(os.path.splitext(y_file)[0])
-                        all_tiles.append((x, y))
+                        tile_paths[(x, int(name))] = os.path.join(x_path, y_file)
                     except ValueError:
                         continue
+
+        all_tiles = list(tile_paths)
 
         if not all_tiles:
             return None
@@ -35,19 +37,16 @@ class Stitcher:
         min_y = min(t[1] for t in all_tiles)
         max_y = max(t[1] for t in all_tiles)
         cols = max_x - min_x + 1
-        tile_set = set(all_tiles)
 
         first = all_tiles[0]
-        sample = pyvips.Image.new_from_file(
-            os.path.join(zoom_dir, str(first[0]), f"{first[1]}.png")
-        )
+        sample = pyvips.Image.new_from_file(tile_paths[first])
         tile_w, tile_h, bands = sample.width, sample.height, sample.bands
 
         images = []
         for y in range(min_y, max_y + 1):
             for x in range(min_x, max_x + 1):
-                tile_path = os.path.join(zoom_dir, str(x), f"{y}.png")
-                if (x, y) in tile_set and os.path.isfile(tile_path):
+                tile_path = tile_paths.get((x, y))
+                if tile_path:
                     images.append(pyvips.Image.new_from_file(tile_path))
                 else:
                     images.append(pyvips.Image.black(tile_w, tile_h, bands=bands))

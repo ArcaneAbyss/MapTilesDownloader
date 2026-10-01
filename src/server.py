@@ -167,7 +167,7 @@ class serverHandler(BaseHTTPRequestHandler):
 
 			else:
 
-				tempFile = self.randomString() + ".png"
+				tempFile = self.randomString() + ".jpg"
 				tempFilePath = os.path.join(BASE_DIR, "temp", tempFile)
 
 				result["code"] = Utils.downloadFileScaled(source, tempFilePath, x, y, z, outputScale)
@@ -175,6 +175,7 @@ class serverHandler(BaseHTTPRequestHandler):
 				print("HIT: " + source + "\n" + "RETURN: " + str(result["code"]))
 
 				if os.path.isfile(tempFilePath):
+					Utils.convertToJpeg(tempFilePath)
 					self.writerByType(outputType).addTile(lock, filePath, tempFilePath, x, y, z, outputScale)
 
 					with open(tempFilePath, "rb") as image_file:
@@ -220,7 +221,7 @@ class serverHandler(BaseHTTPRequestHandler):
 
 			filePath = os.path.join(BASE_DIR, "output", outputDirectory, outputFile)
 
-			self.writerByType(outputType).addMetadata(lock, os.path.join(BASE_DIR, "output", outputDirectory), filePath, outputFile, "Map Tiles Downloader via AliFlux", "png", boundsArray, centerArray, minZoom, maxZoom, "mercator", 256 * outputScale)
+			self.writerByType(outputType).addMetadata(lock, os.path.join(BASE_DIR, "output", outputDirectory), filePath, outputFile, "Map Tiles Downloader via AliFlux", "jpg", boundsArray, centerArray, minZoom, maxZoom, "mercator", 256 * outputScale)
 
 			result = {}
 			result["code"] = 200

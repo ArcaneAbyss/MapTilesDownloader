@@ -145,6 +145,23 @@ class Utils:
 
 
 	@staticmethod
+	def convertToJpeg(path):
+		# Sources serve PNG, JPEG or WebP; normalise to JPEG in place
+		with Image.open(path) as image:
+			if image.format == "JPEG":
+				return
+			if image.mode in ("RGBA", "LA", "P"):
+				image = image.convert("RGBA")
+				background = Image.new("RGB", image.size, (255, 255, 255))
+				background.paste(image, mask=image.getchannel("A"))
+				image = background
+			else:
+				image = image.convert("RGB")
+			image.load()
+		image.save(path, "JPEG", quality=90)
+
+
+	@staticmethod
 	def downloadFileScaled(url, destination, x, y, z, outputScale):
 
 		if outputScale == 1:
@@ -170,7 +187,7 @@ class Utils:
 				childImages.append(image)
 			
 			canvas = Utils.mergeQuadTile(childImages)
-			canvas.save(destination, "PNG")
+			canvas.convert("RGB").save(destination, "JPEG", quality=90)
 			
 			return 200
 
