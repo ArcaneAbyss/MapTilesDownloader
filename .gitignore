@@ -8,3 +8,5 @@ __pycache__/
 *.pyc
 *.tif
 *.tiff
+# Supersample comparison page; embeds third-party satellite imagery
+test/compare.html

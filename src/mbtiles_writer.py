@@ -29,7 +29,7 @@ class MbtilesWriter:
 
 
 	@staticmethod
-	def addMetadata(lock, path, file, name, description, format, bounds, center, minZoom, maxZoom, profile="mercator", tileSize=256):
+	def addMetadata(lock, path, file, name, description, format, bounds, center, minZoom, maxZoom, profile="mercator", tileSize=256, source=None):
 
 		MbtilesWriter.ensureDirectory(lock, path)
 
@@ -54,6 +54,7 @@ class MbtilesWriter:
 			c.executemany("INSERT INTO metadata (name, value) VALUES (?, ?);", [
 				("name", name),
 				("description", description),
+				("source", source or ""),
 				("format", format), 
 				("bounds", ','.join(map(str, bounds))), 
 				("center", ','.join(map(str, center))), 
@@ -130,6 +131,9 @@ class MbtilesWriter:
 		c.execute("SELECT min(tile_row), max(tile_row), min(tile_column), max(tile_column) from tiles WHERE zoom_level = ?", [maxZoom])
 
 		minY, maxY, minX, maxX = c.fetchone()
+		if minY is None:
+			return
+
 		minY = (2 ** maxZoom) - minY - 1
 		maxY = (2 ** maxZoom) - maxY - 1
 
@@ -144,6 +148,12 @@ class MbtilesWriter:
 	
 		c.execute("UPDATE metadata SET value = ? WHERE name = 'bounds'", [boundsString])
 		c.execute("UPDATE metadata SET value = ? WHERE name = 'center'", [centerString])
+
+		# The file can collect several downloads, so report the zoom range it actually holds
+		c.execute("SELECT min(zoom_level), max(zoom_level) FROM tiles")
+		storedMinZoom, storedMaxZoom = c.fetchone()
+		c.execute("UPDATE metadata SET value = ? WHERE name = 'minzoom'", [storedMinZoom])
+		c.execute("UPDATE metadata SET value = ? WHERE name = 'maxzoom'", [storedMaxZoom])
 
 		connection.commit()
 

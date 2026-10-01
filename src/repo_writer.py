@@ -12,7 +12,7 @@ from mbtiles_writer import MbtilesWriter
 class RepoWriter(MbtilesWriter):
 
 	@staticmethod
-	def addMetadata(lock, path, file, name, description, format, bounds, center, minZoom, maxZoom, profile="mercator", tileSize=256):
+	def addMetadata(lock, path, file, name, description, format, bounds, center, minZoom, maxZoom, profile="mercator", tileSize=256, source=None):
 
 		RepoWriter.ensureDirectory(lock, path)
 
@@ -40,6 +40,7 @@ class RepoWriter(MbtilesWriter):
 			c.executemany("INSERT INTO metadata (name, value) VALUES (?, ?);", [
 				("name", name),
 				("description", description),
+				("source", source or ""),
 				("format", format), 
 				("bounds", ','.join(map(str, bounds))), 
 				("center", ','.join(map(str, center))), 

@@ -57,12 +57,14 @@ I design map related things as a hobby, and often I have to work with offline ma
 - Cross platform, use any OS as long as it has Python and a browser
 - Dockerfile available for easy setup
 - Supports 2x/Hi-Res/Retina/512x512 tiles by merging multiple tiles
+- Supersampling: build each tile from deeper-zoom imagery and downsize it for sharper results
 - Supports downloading to file as well as mbtile format
 - Select multiple zoom levels in one go
 - Ability to ignore tiles already downloaded
 - Specify any custom file name format
 - Supports ANY tile provider as long as the url has `x`, `y`, `z`, or `quad` in it
-- Base map uses OpenStreetMap (no API key required)
+- Map rendered with [MapLibre GL JS](https://maplibre.org/) on an OpenStreetMap base map, and place search uses OpenStreetMap Nominatim (no API keys required)
+- Live tile count and size estimate, plus an optional on-map preview of the selected tile source
 - **Built-in tile stitcher** — assembles all downloaded tiles into a single GeoTIFF with one click, using [libvips](https://www.libvips.org/) for memory-efficient processing of very large images
 
 ## Tile Sources
@@ -101,7 +103,35 @@ Set **Zoom from** and **Zoom to** to the same value to download only that level.
 
 ## Output
 
-Tiles are saved to `src/output/{timestamp}/` by default, in `{z}/{x}/{y}.png` folder structure. Both the output directory and file name format can be customised under **More Options** in the UI.
+Tiles are saved in one folder per tile source, in `{z}/{x}/{y}.jpg` structure:
+
+```
+src/output/
+  esri-world-imagery/          zoom levels from every ESRI download, plus metadata.json
+  esri-world-imagery_ss4x/     the same source with 4× supersampling
+  bing-maps-satellite_512px/   Bing at 2x output scale
+  tiles.example.com/           a custom URL, named after its host
+```
+
+Downloading more zoom levels or a neighbouring area from the same source adds to its folder, and tiles you already have are skipped instead of downloaded again. Tiles made with a different output scale or supersample setting go to their own folder so they never get mixed up. Each folder's `metadata.json` records the source URL and the combined bounds and zoom range of everything in it. The sidebar shows the destination folder before you download.
+
+The folder name comes from **Output options → Output directory**, which defaults to `{source}{variant}`. `{source}` is the provider name, `{variant}` marks the output scale and supersampling, and `{timestamp}` gives each download a fresh folder if you prefer that. The UI remembers your last-used source, zoom and output settings.
+
+## Supersampling
+
+**Output options → Supersample** builds each tile from sharper imagery a few zoom levels deeper, then downsizes it. For example, at 4×, every zoom 16 tile is made by fetching the 4×4 zoom 18 tiles that cover it, joining them into a 1024px image and resizing that to 256px (Lanczos) before saving it as JPEG.
+
+| Setting | Source zoom | Requests per tile | Zoom levels saved |
+|---------|-------------|-------------------|-------------------|
+| 2× | zoom + 1 | 4 | every 2nd: 3, 5, 7 … |
+| 4× | zoom + 2 | 16 | every 3rd: 3, 6, 9 … |
+| 8× | zoom + 3 | 64 | every 4th: 3, 7, 11 … |
+
+Because a supersampled tile already carries the detail of the levels just below it, the zoom range is stepped from **Zoom from**: downloading zoom 3 to 16 at 4× saves zoom 3, 6, 9, 12 and 15 in one go. The sidebar lists the levels before you download.
+
+It combines with **Output scale**: 2x scale with 4× supersample fetches zoom + 3 and saves 512px tiles.
+
+Supersampling suits satellite imagery. On road or hybrid maps, labels and road widths are drawn for the deeper zoom and shrink to unreadable sizes. It also multiplies the number of requests, so you are more likely to be rate limited; the sidebar shows the total request count before you download.
 
 ## Stitching Tiles into a Single Image
 
@@ -112,7 +142,7 @@ The downloader includes a built-in stitcher powered by [libvips](https://www.lib
 2. Start the download as normal
 3. Once all tiles have downloaded, stitching begins automatically
 4. Progress is shown in the log panel; the button shows **STITCHING...** while it runs
-5. Output is saved alongside the tile folders as `stitched_z{zoom}.tif` — one file per zoom level
+5. Output is saved in the source folder as `stitched_z{zoom}_{timestamp}.tif`, one file per zoom level, covering only the region you just downloaded
 
 The output is a tiled, deflate-compressed TIFF compatible with GIS tools (QGIS, GDAL, ArcGIS) and image editors. For zoom ranges, a separate TIFF is produced for each zoom level.
 

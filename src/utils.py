@@ -18,6 +18,7 @@ import glob
 import os
 import base64
 import math
+from concurrent.futures import ThreadPoolExecutor
 
 from PIL import Image
 
@@ -26,18 +27,6 @@ class Utils:
 	@staticmethod
 	def randomString():
 		return uuid.uuid4().hex.upper()[0:6]
-
-	def getChildTiles(x, y, z):
-		childX = x * 2
-		childY = y * 2
-		childZ = z + 1
-
-		return [
-			(childX, childY, childZ),
-			(childX+1, childY, childZ),
-			(childX+1, childY+1, childZ),
-			(childX, childY+1, childZ),
-		]
 
 	def makeQuadKey(tile_x, tile_y, level):
 		quadkey = ""
@@ -80,37 +69,6 @@ class Utils:
 		return url
 
 	@staticmethod
-	def mergeQuadTile(quadTiles):
-
-		width = 0
-		height = 0
-
-		for tile in quadTiles:
-			if(tile is not None):
-				width = quadTiles[0].size[0] * 2
-				height = quadTiles[1].size[1] * 2
-				break
-
-		if width == 0 or height == 0:
-			return None
-
-		canvas = Image.new('RGB', (width, height))
-
-		if quadTiles[0] is not None:
-			canvas.paste(quadTiles[0], box=(0,0))
-
-		if quadTiles[1] is not None:
-			canvas.paste(quadTiles[1], box=(width - quadTiles[1].size[0], 0))
-
-		if quadTiles[2] is not None:
-			canvas.paste(quadTiles[2], box=(width - quadTiles[2].size[0], height - quadTiles[2].size[1]))
-
-		if quadTiles[3] is not None:
-			canvas.paste(quadTiles[3], box=(0, height - quadTiles[3].size[1]))
-
-		return canvas
-
-	@staticmethod
 	def downloadFile(url, destination, x, y, z):
 
 		url = Utils.qualifyURL(url, x, y, z)
@@ -128,18 +86,32 @@ class Utils:
 			'Accept-Language': 'en-US,en;q=0.9',
 		}
 
-		try:
-			req = urllib.request.Request(url, headers=headers)
-			with urllib.request.urlopen(req) as response:
-				with open(destination, 'wb') as f:
-					shutil.copyfileobj(response, f)
-			code = 200
-		except urllib.error.URLError as e:
-			if not hasattr(e, "code"):
+		# Retry dropped connections and server errors a couple of times; tile servers
+		# under load often reset a connection that succeeds a moment later
+		for attempt in range(3):
+			try:
+				req = urllib.request.Request(url, headers=headers)
+				with urllib.request.urlopen(req, timeout=30) as response:
+					with open(destination, 'wb') as f:
+						shutil.copyfileobj(response, f)
+				return 200
+			except urllib.error.HTTPError as e:
+				code = e.code
+				if code < 500:
+					break
+			except OSError as e:
+				# URLError, connection resets and timeouts are all OSErrors
 				print(e)
 				code = -1
-			else:
-				code = e.code
+
+			if os.path.isfile(destination):
+				os.remove(destination)
+			if attempt < 2:
+				time.sleep(attempt + 1)
+
+		# Never leave a partial download behind to be saved as a tile
+		if os.path.isfile(destination):
+			os.remove(destination)
 
 		return code
 
@@ -162,38 +134,50 @@ class Utils:
 
 
 	@staticmethod
-	def downloadFileScaled(url, destination, x, y, z, outputScale):
+	def downloadFileScaled(url, destination, x, y, z, outputScale, supersample=1):
 
-		if outputScale == 1:
+		if outputScale == 1 and supersample == 1:
 			return Utils.downloadFile(url, destination, x, y, z)
 
-		elif outputScale == 2:
+		# Build the tile from an n x n grid of tiles `depth` zoom levels deeper.
+		# outputScale keeps the full resolution (2x = 512px), supersample
+		# downsizes the grid afterwards (4x = 1024px canvas shrunk to 256px).
+		n = outputScale * supersample
+		depth = int(math.log2(n))
+		childZ = z + depth
 
-			childTiles = Utils.getChildTiles(x, y, z)
-			childImages = []
+		children = [(x * n + dx, y * n + dy) for dy in range(n) for dx in range(n)]
+		tempDir = os.path.dirname(destination)
 
-			for childX, childY, childZ in childTiles:
-				
-				tempFile = Utils.randomString() + ".png"
-				tempFilePath = os.path.join("temp", tempFile)
-
+		def fetchChild(child):
+			childX, childY = child
+			tempFilePath = os.path.join(tempDir, Utils.randomString() + ".tile")
+			try:
 				code = Utils.downloadFile(url, tempFilePath, childX, childY, childZ)
+				if code != 200:
+					return code, None
+				with Image.open(tempFilePath) as image:
+					return code, image.convert("RGB")
+			finally:
+				if os.path.isfile(tempFilePath):
+					os.remove(tempFilePath)
 
-				if code == 200:
-					image = Image.open(tempFilePath)
-				else:
-					return code
+		with ThreadPoolExecutor(max_workers=min(4, len(children))) as pool:
+			results = list(pool.map(fetchChild, children))
 
-				childImages.append(image)
-			
-			canvas = Utils.mergeQuadTile(childImages)
-			canvas.convert("RGB").save(destination, "JPEG", quality=90)
-			
-			return 200
+		for code, image in results:
+			if image is None:
+				return code
 
-		#TODO implement custom scale
+		tileWidth, tileHeight = results[0][1].size
+		canvas = Image.new("RGB", (tileWidth * n, tileHeight * n))
 
-			
+		for (childX, childY), (code, image) in zip(children, results):
+			canvas.paste(image, ((childX - x * n) * tileWidth, (childY - y * n) * tileHeight))
 
+		if supersample > 1:
+			canvas = canvas.resize((tileWidth * outputScale, tileHeight * outputScale), Image.LANCZOS)
 
+		canvas.save(destination, "JPEG", quality=90)
 
+		return 200

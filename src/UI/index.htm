@@ -3,18 +3,21 @@
 <head>
 	<title>Map Tiles Downloader</title>
 	<meta charset="utf-8"/>
-    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+	<meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
 
-	<!-- TODO replace jquery with react -->
 	<script src="jquery.min.js"></script>
 
-    <script src='https://api.mapbox.com/mapbox-gl-js/v0.50.0/mapbox-gl.js'></script>
-    <link href='https://api.mapbox.com/mapbox-gl-js/v0.50.0/mapbox-gl.css' rel='stylesheet' />
+	<!-- MapLibre 6 ships only as an ES module. Module scripts run before DOMContentLoaded,
+	     so window.maplibregl is ready by the time main.js's jQuery ready handler runs. -->
+	<script type='module'>
+		import * as maplibregl from 'https://cdn.jsdelivr.net/npm/maplibre-gl@6.11.2/dist/maplibre-gl.mjs';
+		window.maplibregl = maplibregl;
+	</script>
+	<link href='https://cdn.jsdelivr.net/npm/maplibre-gl@6.11.2/dist/maplibre-gl.css' rel='stylesheet' />
 
-	<script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v2.3.0/mapbox-gl-geocoder.min.js'></script>
-	<script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.0.9/mapbox-gl-draw.js'></script>
+	<!-- mapbox-gl-draw is renderer-agnostic and works with MapLibre; its cursor styles are in style.css -->
+	<script src='https://cdn.jsdelivr.net/npm/@mapbox/mapbox-gl-draw@1.5.2/dist/mapbox-gl-draw.js'></script>
 	<script src='mapbox-gl-draw-rectangle-mode.min.js'></script>
-	<link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.0.9/mapbox-gl-draw.css' type='text/css'/>
 
 	<script src='https://cdn.jsdelivr.net/npm/progressbar.js@1.1.0/dist/progressbar.min.js'></script>
 
@@ -31,165 +34,166 @@
 </head>
 <body>
 
-	<div id='max-height'>
-
+	<div id='map-wrap'>
 		<div id='map-view'></div>
-
-		<div id='main-title'>Map Tiles Downloader</div>
-
+		<div id='map-hint'>Ctrl + click the map to inspect a tile</div>
 	</div>
 
 	<div class='sidebar' id='main-sidebar'>
 
-		<div class='step-number'>
-			1
-		</div>
-		<div class="step-title">
-			Search an Area
-		</div>
+		<div class='sidebar-header'>Map Tiles Downloader</div>
 
-		<form id='search-form' class='sidebar-section row'>
-			<div class="input-field col s12">
-				<input id="location-box" type="text" value="New York" />
-				<label for="location-box">Enter a location</label>
+		<div class='sidebar-body'>
+
+			<div class='step'>
+				<div class='step-head'><span class='step-number'>1</span><span class='step-title'>Find a place</span></div>
+				<form id='search-form' class='step-body'>
+					<div class='search-row'>
+						<input id='location-box' type='text' placeholder='City, address or landmark' autocomplete='off' />
+						<button type='submit' class='btn-flat waves-effect' id='search-button' title='Search'>Go</button>
+					</div>
+				</form>
 			</div>
-		</form>
 
-
-		<div class='step-number'>
-			2
-		</div>
-		<div class="step-title">
-			Select a Region
-		</div>
-
-		<div class='center-align sidebar-section'>
-			<p>
-				<a class="waves-effect waves-light z-depth-0 btn-small orange darken-3" id='rectangle-draw-button'>Draw a rectangle</a>
-			</p>
-		</div>
-
-		<div class='step-number'>
-			3
-		</div>
-		<div class="step-title">
-			Configure
-		</div>
-
-		<div class='sidebar-section'>
-			<div class="row">
-				<div class="input-field col s6">
-					<input id="zoom-from-box" type="text" value='15'/>
-					<label for="zoom-from-box" class="active">Zoom from:</label>
-				</div>
-				<div class="input-field col s6">
-					<input id="zoom-to-box" type="text" value='15'/>
-					<label for="zoom-to-box" class="active">Zoom to:</label>
+			<div class='step'>
+				<div class='step-head'><span class='step-number'>2</span><span class='step-title'>Select a region</span></div>
+				<div class='step-body'>
+					<div class='button-row'>
+						<a class='waves-effect waves-light z-depth-0 btn-small orange darken-3' id='rectangle-draw-button'>Draw rectangle</a>
+						<a class='waves-effect z-depth-0 btn-small btn-outline' id='use-view-button'>Use map view</a>
+					</div>
+					<div class='hints' id='region-info'>No region selected yet.</div>
 				</div>
 			</div>
 
-
-			<div class="row">
-				<div class="input-field col s10">
-					<input id="source-box" type="text" value='http://ecn.t0.tiles.virtualearth.net/tiles/a{quad}.jpeg?g=129&mkt=en&stl=H'>
-					<label for="source-box">Map Tile Source</label>
+			<div class='step'>
+				<div class='step-head'><span class='step-number'>3</span><span class='step-title'>Tile source</span></div>
+				<div class='step-body'>
+					<div class='input-field'>
+						<select id='source-select'></select>
+						<label>Provider</label>
+					</div>
+					<div class='input-field'>
+						<input id='source-box' type='text' value='http://ecn.t0.tiles.virtualearth.net/tiles/a{quad}.jpeg?g=129&mkt=en&stl=H' spellcheck='false'>
+						<label for='source-box' class='active'>Tile URL</label>
+						<span class='helper-text' id='source-help'>Use {x}, {y}, {z} or {quad} as placeholders.</span>
+					</div>
+					<label>
+						<input type='checkbox' id='source-preview-checkbox' />
+						<span>Preview this source on the map</span>
+					</label>
 				</div>
-				<div class="input-field col s2">
-					<a class='waves-effect waves-light btn-small blue-grey lighten-2 z-depth-0 dropdown-trigger' id='source-select' href='#' data-target='sources'>⯆</a>
+			</div>
 
-					<ul id='sources' class='dropdown-content'>
-					</ul>
+			<div class='step'>
+				<div class='step-head'><span class='step-number'>4</span><span class='step-title'>Zoom levels</span></div>
+				<div class='step-body'>
+					<div class='zoom-row'>
+						<div class='input-field'>
+							<input id='zoom-from-box' type='number' min='0' max='22' step='1' value='15'/>
+							<label for='zoom-from-box' class='active'>From</label>
+						</div>
+						<div class='input-field'>
+							<input id='zoom-to-box' type='number' min='0' max='22' step='1' value='15'/>
+							<label for='zoom-to-box' class='active'>To</label>
+						</div>
+						<a class='waves-effect z-depth-0 btn-small btn-outline' id='grid-preview-button'>Preview grid</a>
+					</div>
+					<div class='hints'>Map is at zoom <b id='current-zoom'>-</b></div>
+					<div class='hints' id='zoom-step-hint' style='display: none;'></div>
 				</div>
 			</div>
 
-			<div class='center-align'>
-				<a class="waves-effect waves-light z-depth-0 btn-small orange darken-3" id='grid-preview-button'>Preview Grid</a>
+			<div class='step'>
+				<div class='step-head'>
+					<span class='step-number'>5</span>
+					<a href='javascript:void(0)' class='step-title' id='more-options-toggle'>Output options <span id='more-options-caret'>+</span></a>
+				</div>
+				<div class='step-body'>
+					<div id='more-options' style='display:none;'>
+						<div class='row'>
+							<div class='input-field col s6'>
+								<select id='output-type'>
+									<option value='directory'>Directory</option>
+									<option value='mbtiles'>MBTiles</option>
+									<option value='repo'>Repo</option>
+								</select>
+								<label>Output type</label>
+							</div>
+							<div class='input-field col s6'>
+								<select id='output-scale'>
+									<option value='1'>1x (256px)</option>
+									<option value='2'>2x (512px)</option>
+								</select>
+								<label>Output scale</label>
+							</div>
+						</div>
+						<div class='input-field has-helper'>
+							<select id='output-supersample'>
+								<option value='1'>Off</option>
+								<option value='2'>2× (from zoom +1)</option>
+								<option value='4'>4× (from zoom +2)</option>
+								<option value='8'>8× (from zoom +3)</option>
+							</select>
+							<label>Supersample</label>
+							<span class='helper-text'>Builds each tile from sharper, deeper-zoom imagery, then downsizes it. 4× fetches 16 source tiles per tile and saves every 3rd zoom level. Best for satellite; labels on road maps shrink to unreadable.</span>
+						</div>
+						<div class='input-field'>
+							<input id='output-directory-box' type='text' value='{source}{variant}' spellcheck='false'>
+							<label for='output-directory-box' class='active'>Output directory</label>
+							<span class='helper-text'>{source} is the provider, {variant} marks 2x scale or supersampling, {timestamp} makes a new folder per download.</span>
+						</div>
+						<div class='input-field'>
+							<input id='output-file-box' type='text' value='{z}/{x}/{y}.jpg' spellcheck='false'>
+							<label for='output-file-box' class='active'>Output file</label>
+						</div>
+						<div class='input-field'>
+							<input id='parallel-threads-box' type='number' min='1' max='32' value='4'>
+							<label for='parallel-threads-box' class='active'>Parallel downloads</label>
+						</div>
+					</div>
+					<label id='stitch-option'>
+						<input type='checkbox' id='stitch-checkbox' />
+						<span>Stitch tiles into a GeoTIFF after download</span>
+					</label>
+				</div>
 			</div>
 
 		</div>
 
-		<div class='step-number'>
-			4
+		<div class='sidebar-footer'>
+			<div id='tile-summary'>Draw a region to see how many tiles it covers.</div>
+			<div id='output-preview'></div>
+			<button class='waves-effect waves-light z-depth-0 btn-large cyan darken-2' id='download-button' disabled>Download</button>
 		</div>
-		<div class="step-title">
-			<a href='javascript:void(0)' id='more-options-toggle'>More Options (+)</a>
-		</div>
-
-		<div style='display:none;' id='more-options' class='sidebar-section row'>
-
-			<div class="input-field col s12">
-				<select id="output-scale" type="text">
-					<option value="1">1x</option>
-					<option value="2">2x</option>
-				</select>
-				<label for="output-scale">Output scale</label>
-			</div>
-
-			<div class="input-field col s12">
-				<input id="output-directory-box" type="text" value="{timestamp}">
-				<label for="output-directory-box">Output directory</label>
-			</div>
-
-			<div class="input-field col s12">
-				<select id="output-type" type="text">
-					<option value="directory">Directory</option>
-					<option value="mbtiles">Mbtiles</option>
-					<option value="repo">Repo</option>
-				</select>
-				<label for="output-type">Output type</label>
-			</div>
-
-			<div class="input-field col s12">
-				<input id="output-file-box" type="text" value="{z}/{x}/{y}.jpg">
-				<label for="output-file-box">Output file</label>
-			</div>
-
-			<div class="input-field col s12">
-				<input id="parallel-threads-box" type="text" value="4">
-				<label for="parallel-threads-box">Parallel downloads</label>
-			</div>
-		</div>
-
-		<div class="sidebar-section" id="stitch-option">
-			<label>
-				<input type="checkbox" id="stitch-checkbox" />
-				<span>Stitch tiles into image after download</span>
-			</label>
-		</div>
-
-		<button class='waves-effect waves-light z-depth-0 btn-large cyan darken-2 bottom-button' id='download-button'>Download</button>
 
 	</div>
 
-	<div class='sidebar' id='download-sidebar' style="display: none;">
+	<div class='sidebar' id='download-sidebar' style='display: none;'>
 
-		<div class='step-number'>
-			5
-		</div>
-		<div class="step-title" id="download-phase-title">
-			Downloading tiles
-		</div>
-		<div class="hints sidebar-section" id="download-phase-hint">
-			Please wait...
-		</div>
+		<div class='sidebar-header' id='download-phase-title'>Downloading tiles</div>
 
-		<div class="sidebar-section">
-			<div id='progress-radial' class=''>
+		<div class='sidebar-body'>
+			<div class='hints' id='download-phase-hint'>Please wait...</div>
 
+			<div id='progress-radial'></div>
+			<p id='progress-subtitle'></p>
+			<p id='progress-rate' class='hints'></p>
+
+			<div class='stats'>
+				<div class='stat'><div class='stat-value' id='stat-saved'>0</div><div class='stat-label'>Saved</div></div>
+				<div class='stat'><div class='stat-value' id='stat-skipped'>0</div><div class='stat-label'>Already had</div></div>
+				<div class='stat'><div class='stat-value' id='stat-failed'>0</div><div class='stat-label'>Failed</div></div>
 			</div>
 
-			<p id='progress-subtitle' class=''>
+			<div class='tile-strip'></div>
 
-			</p>
-
-			<p class='tile-strip '>
-			</p>
-
+			<textarea id='log-view' readonly spellcheck='false'></textarea>
 		</div>
 
-		<textarea id='log-view' class="sidebar-section"></textarea>
-
-		<button class='waves-effect waves-light z-depth-0 btn-large red lighten-5 bottom-button' id='stop-button'>Stop</button>
+		<div class='sidebar-footer'>
+			<button class='waves-effect waves-light z-depth-0 btn-large red lighten-5' id='stop-button'>Stop</button>
+		</div>
 
 	</div>
 

@@ -44,15 +44,15 @@ stitch_job = {"state": "idle", "message": "", "files": []}
 stitch_job_lock = threading.Lock()
 
 
-def run_stitch(output_dir, min_zoom, max_zoom):
+def run_stitch(output_dir, zooms, bounds=None, suffix=""):
     try:
         files = []
-        for zoom in range(min_zoom, max_zoom + 1):
+        for zoom in zooms:
             with stitch_job_lock:
                 stitch_job["state"] = "stitching"
                 stitch_job["message"] = f"Stitching zoom level {zoom}..."
 
-            path = Stitcher.stitch_zoom_level(output_dir, zoom)
+            path = Stitcher.stitch_zoom_level(output_dir, zoom, bounds, suffix)
             if path:
                 files.append(path)
 
@@ -138,6 +138,7 @@ class serverHandler(BaseHTTPRequestHandler):
 			outputFile = str(postvars['outputFile'][0])
 			outputType = str(postvars['outputType'][0])
 			outputScale = int(postvars['outputScale'][0])
+			supersample = int(postvars.get('supersample', ['1'])[0])
 			source = str(postvars['source'][0])
 
 			replaceMap = {
@@ -161,6 +162,7 @@ class serverHandler(BaseHTTPRequestHandler):
 
 			if self.writerByType(outputType).exists(filePath, x, y, z):
 				result["code"] = 200
+				result["exists"] = True
 				result["message"] = 'Tile already exists'
 
 				print("EXISTS: " + filePath)
@@ -170,7 +172,7 @@ class serverHandler(BaseHTTPRequestHandler):
 				tempFile = self.randomString() + ".jpg"
 				tempFilePath = os.path.join(BASE_DIR, "temp", tempFile)
 
-				result["code"] = Utils.downloadFileScaled(source, tempFilePath, x, y, z, outputScale)
+				result["code"] = Utils.downloadFileScaled(source, tempFilePath, x, y, z, outputScale, supersample)
 
 				print("HIT: " + source + "\n" + "RETURN: " + str(result["code"]))
 
@@ -209,6 +211,7 @@ class serverHandler(BaseHTTPRequestHandler):
 			boundsArray = map(float, bounds.split(","))
 			center = str(postvars['center'][0])
 			centerArray = map(float, center.split(","))
+			source = str(postvars['source'][0])
 
 			replaceMap = {
 				"timestamp": str(timestamp),
@@ -221,11 +224,12 @@ class serverHandler(BaseHTTPRequestHandler):
 
 			filePath = os.path.join(BASE_DIR, "output", outputDirectory, outputFile)
 
-			self.writerByType(outputType).addMetadata(lock, os.path.join(BASE_DIR, "output", outputDirectory), filePath, outputFile, "Map Tiles Downloader via AliFlux", "jpg", boundsArray, centerArray, minZoom, maxZoom, "mercator", 256 * outputScale)
+			self.writerByType(outputType).addMetadata(lock, os.path.join(BASE_DIR, "output", outputDirectory), filePath, outputFile, "Map Tiles Downloader via AliFlux", "jpg", boundsArray, centerArray, minZoom, maxZoom, "mercator", 256 * outputScale, source)
 
 			result = {}
 			result["code"] = 200
 			result["message"] = 'Metadata written'
+			result["outputPath"] = os.path.join(BASE_DIR, "output", outputDirectory)
 
 			self.send_response(200)
 			# self.send_header("Access-Control-Allow-Origin", "*")
@@ -288,12 +292,23 @@ class serverHandler(BaseHTTPRequestHandler):
 			outputDirectory = outputDirectory.replace('{timestamp}', str(timestamp))
 			full_output_dir = os.path.join(BASE_DIR, "output", outputDirectory)
 
+			# Supersampled downloads skip zoom levels, so stitch only the levels that were downloaded
+			if 'zooms' in postvars:
+				zooms = [int(v) for v in postvars['zooms'][0].split(",")]
+			else:
+				zooms = list(range(minZoom, maxZoom + 1))
+
+			# Output folders can hold several downloads, so only stitch this download's region
+			bounds = None
+			if 'bounds' in postvars:
+				bounds = [float(v) for v in postvars['bounds'][0].split(",")]
+
 			with stitch_job_lock:
 				stitch_job["state"] = "starting"
 				stitch_job["message"] = "Starting..."
 				stitch_job["files"] = []
 
-			t = threading.Thread(target=run_stitch, args=(full_output_dir, minZoom, maxZoom), daemon=True)
+			t = threading.Thread(target=run_stitch, args=(full_output_dir, zooms, bounds, f"_{timestamp}"), daemon=True)
 			t.start()
 
 			result = {"code": 200, "message": "Stitching started"}
