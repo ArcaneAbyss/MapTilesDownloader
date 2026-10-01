@@ -81,6 +81,7 @@ The following providers are available from the dropdown and have been verified w
 | Open Street Maps | Road | |
 | Open Cycle Maps | Cycling | |
 | ESRI World Imagery | Satellite | Best quality, up to zoom 19-20, free, no key required |
+| Sentinel-2 Cloudless (EOX) | Satellite | 2025 cloud-free mosaic, 10 m resolution (useful up to zoom ~14), CC BY-NC-SA 4.0 — non-commercial only |
 | Carto Light | Road (minimal) | |
 
 **For the highest quality satellite imagery**, use **ESRI World Imagery** at zoom level 18 or 19.

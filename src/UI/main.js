@@ -31,6 +31,7 @@ $(function() {
 		"div-3": "",
 
 		"ESRI World Imagery": "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+		"Sentinel-2 Cloudless (EOX)": "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg",
 		"Carto Light": "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
 
 	};
