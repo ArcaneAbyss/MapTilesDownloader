@@ -58,9 +58,15 @@
 			<div class='step'>
 				<div class='step-head'><span class='step-number'>2</span><span class='step-title'>Select a region</span></div>
 				<div class='step-body'>
-					<div class='button-row'>
-						<a class='waves-effect waves-light z-depth-0 btn-small orange darken-3' id='rectangle-draw-button'>Draw rectangle</a>
-						<a class='waves-effect z-depth-0 btn-small btn-outline' id='use-view-button'>Use map view</a>
+					<div class='region-tools'>
+						<a class='waves-effect z-depth-0 btn-small btn-outline' id='rectangle-draw-button'>Rectangle</a>
+						<a class='waves-effect z-depth-0 btn-small btn-outline' id='polygon-draw-button'>Polygon</a>
+						<a class='waves-effect z-depth-0 btn-small btn-outline' id='line-draw-button'>Line</a>
+						<a class='waves-effect z-depth-0 btn-small btn-outline' id='use-view-button'>Map view</a>
+					</div>
+					<div class='input-field' id='radius-field' style='display: none;'>
+						<input id='radius-box' type='number' min='1' max='50000' step='1' value='100'>
+						<label for='radius-box' class='active'>Radius either side of the line (metres)</label>
 					</div>
 					<div class='hints' id='region-info'>No region selected yet.</div>
 				</div>
@@ -90,16 +96,22 @@
 				<div class='step-body'>
 					<div class='zoom-row'>
 						<div class='input-field'>
-							<input id='zoom-from-box' type='number' min='0' max='22' step='1' value='15'/>
+							<input id='zoom-from-box' type='number' min='1' max='18' step='1' value='15'/>
 							<label for='zoom-from-box' class='active'>From</label>
 						</div>
 						<div class='input-field'>
-							<input id='zoom-to-box' type='number' min='0' max='22' step='1' value='15'/>
+							<input id='zoom-to-box' type='number' min='1' max='18' step='1' value='15'/>
 							<label for='zoom-to-box' class='active'>To</label>
 						</div>
+						<div class='input-field'>
+							<input id='zoom-interval-box' type='number' min='1' max='17' step='1' value='1' title='Save every Nth zoom level, counting from From'/>
+							<label for='zoom-interval-box' class='active'>Every</label>
+						</div>
+					</div>
+					<div class='zoom-actions'>
+						<div class='hints'>Map is at zoom <b id='current-zoom'>-</b></div>
 						<a class='waves-effect z-depth-0 btn-small btn-outline' id='grid-preview-button'>Preview grid</a>
 					</div>
-					<div class='hints'>Map is at zoom <b id='current-zoom'>-</b></div>
 					<div class='hints' id='zoom-step-hint' style='display: none;'></div>
 				</div>
 			</div>
@@ -136,7 +148,7 @@
 								<option value='8'>8× (from zoom +3)</option>
 							</select>
 							<label>Supersample</label>
-							<span class='helper-text'>Builds each tile from sharper, deeper-zoom imagery, then downsizes it. 4× fetches 16 source tiles per tile and saves every 3rd zoom level. Best for satellite; labels on road maps shrink to unreadable.</span>
+							<span class='helper-text'>Builds each tile from sharper, deeper-zoom imagery, then downsizes it. 4× fetches 16 source tiles per tile and sets the zoom interval to every 3rd level. Best for satellite; labels on road maps shrink to unreadable.</span>
 						</div>
 						<div class='input-field'>
 							<input id='output-directory-box' type='text' value='{source}{variant}' spellcheck='false'>
@@ -150,6 +162,11 @@
 						<div class='input-field'>
 							<input id='parallel-threads-box' type='number' min='1' max='32' value='4'>
 							<label for='parallel-threads-box' class='active'>Parallel downloads</label>
+						</div>
+						<div class='input-field has-helper'>
+							<input id='rate-limit-box' type='number' min='0.5' max='1000' step='0.5' placeholder='Auto'>
+							<label for='rate-limit-box' class='active'>Max requests per second</label>
+							<span class='helper-text' id='rate-limit-help'></span>
 						</div>
 					</div>
 					<label id='stitch-option'>

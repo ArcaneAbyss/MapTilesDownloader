@@ -53,7 +53,8 @@ I design map related things as a hobby, and often I have to work with offline ma
 ## Features
 
 - Super easy to use map UI to select region and options
-- Multi-threading to download tiles in parallel
+- Select a rectangle, a free-form polygon, or a corridor along a line with a radius
+- Multi-threading to download tiles in parallel, with automatic rate limiting for large downloads
 - Cross platform, use any OS as long as it has Python and a browser
 - Dockerfile available for easy setup
 - Supports 2x/Hi-Res/Retina/512x512 tiles by merging multiple tiles
@@ -88,18 +89,31 @@ The following providers are available from the dropdown and have been verified w
 
 **For the highest quality satellite imagery**, use **ESRI World Imagery** at zoom level 18 or 19.
 
+## Selecting a Region
+
+| Tool | Selects |
+|------|---------|
+| Rectangle | Click two corners |
+| Polygon | Click each corner; click the first corner or double-click to finish |
+| Line | Click points along a route and double-click to finish, then set **Radius** (metres). Every tile within that distance of the line is downloaded, shown as a shaded corridor |
+| Map view | The area currently on screen |
+
+Click a drawn shape to move it or drag its points. Only tiles that actually touch the shape are downloaded, so a polygon or corridor costs far fewer tiles than its bounding box.
+
 ## Zoom Levels
 
-Zoom level controls the detail and tile count. Each level up has 4× more tiles than the previous.
+Zoom level controls the detail and tile count. Each level up has 4× more tiles than the previous. Zoom levels range from 1 to 18.
 
 | Zoom | Detail level |
 |------|-------------|
 | 1–5 | Country / continent |
 | 10–12 | City |
 | 15–16 | Street (default) |
-| 18–19 | Building / maximum detail |
+| 17–18 | Building / maximum detail |
 
-Set **Zoom from** and **Zoom to** to the same value to download only that level. Set a range to download multiple levels at once (useful for maps that need to work at different scales).
+Set **From** and **To** to the same value to download only that level. Set a range to download multiple levels at once (useful for maps that need to work at different scales).
+
+**Every** (1 to 17) saves only every Nth level of the range, counting from **From**: zoom 3 to 16 with Every 3 downloads zoom 3, 6, 9, 12 and 15. A level that falls between steps (16 here) is skipped, and the sidebar lists the levels before you download.
 
 ## Output
 
@@ -117,17 +131,28 @@ Downloading more zoom levels or a neighbouring area from the same source adds to
 
 The folder name comes from **Output options → Output directory**, which defaults to `{source}{variant}`. `{source}` is the provider name, `{variant}` marks the output scale and supersampling, and `{timestamp}` gives each download a fresh folder if you prefer that. The UI remembers your last-used source, zoom and output settings.
 
+## Rate Limiting
+
+Tile servers block clients that send too many requests. **Output options → Max requests per second** controls the pace:
+
+- **Empty (Auto)**: no limit up to 2,000 tiles. Above that, a conservative pace for the provider: 25/s for ESRI, 10/s for Bing, EOX and Carto, 4/s for Google, 2/s for OpenStreetMap, 8/s for anything else. None of these providers publish a limit, so these are starting points.
+- **A number**: always pace at that many requests per second.
+
+The pace counts requests to the tile server, so a 4× supersampled tile counts as 16. Tiles you already have don't count. The sidebar shows the pace and the expected time before you download.
+
+If the server still refuses requests (403 or 429) or fails, downloading pauses for 30 seconds, continues at half the pace, and retries the refused tiles, up to 3 attempts per tile. Repeated refusals double the pause, up to 5 minutes.
+
 ## Supersampling
 
 **Output options → Supersample** builds each tile from sharper imagery a few zoom levels deeper, then downsizes it. For example, at 4×, every zoom 16 tile is made by fetching the 4×4 zoom 18 tiles that cover it, joining them into a 1024px image and resizing that to 256px (Lanczos) before saving it as JPEG.
 
-| Setting | Source zoom | Requests per tile | Zoom levels saved |
+| Setting | Source zoom | Requests per tile | Default Every |
 |---------|-------------|-------------------|-------------------|
-| 2× | zoom + 1 | 4 | every 2nd: 3, 5, 7 … |
-| 4× | zoom + 2 | 16 | every 3rd: 3, 6, 9 … |
-| 8× | zoom + 3 | 64 | every 4th: 3, 7, 11 … |
+| 2× | zoom + 1 | 4 | 2 (3, 5, 7 …) |
+| 4× | zoom + 2 | 16 | 3 (3, 6, 9 …) |
+| 8× | zoom + 3 | 64 | 4 (3, 7, 11 …) |
 
-Because a supersampled tile already carries the detail of the levels just below it, the zoom range is stepped from **Zoom from**: downloading zoom 3 to 16 at 4× saves zoom 3, 6, 9, 12 and 15 in one go. The sidebar lists the levels before you download.
+Because a supersampled tile already carries the detail of the levels just below it, choosing a supersample setting fills in the matching **Every** interval: zoom 3 to 16 at 4× saves zoom 3, 6, 9, 12 and 15 in one go. You can still change **Every** afterwards.
 
 It combines with **Output scale**: 2x scale with 4× supersample fetches zoom + 3 and saves 512px tiles.
 

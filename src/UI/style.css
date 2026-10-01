@@ -136,12 +136,6 @@ body {
 	color: #37474f;
 }
 
-.button-row {
-	display: flex;
-	gap: 8px;
-	margin-bottom: 6px;
-}
-
 .btn-outline {
 	background: transparent !important;
 	color: #e65100 !important;
@@ -155,8 +149,20 @@ body {
 	white-space: nowrap;
 }
 
-.button-row .btn-small {
-	flex: 1;
+.region-tools {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.btn-outline.active {
+	background: #e65100 !important;
+	color: white !important;
+}
+
+#radius-field {
+	margin-top: 1.4rem;
 }
 
 /* Search */
@@ -185,13 +191,16 @@ body {
 }
 
 .zoom-row .input-field {
-	width: 64px;
+	flex: 1;
 	margin-bottom: 0;
 }
 
-.zoom-row .btn-small {
-	flex: 1;
-	margin-bottom: 18px;
+.zoom-actions {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 4px;
 }
 
 #source-box {
