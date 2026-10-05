@@ -25,8 +25,8 @@ $(function() {
 	var EST_KB_PER_TILE = 20;
 	var MAX_LOG_LINES = 1000;
 	var SETTINGS_KEY = "map-tiles-downloader-settings";
-	var SETTINGS_VERSION = 2;
-	var DEFAULT_OUTPUT_DIRECTORY = "{source}{variant}";
+	var SETTINGS_VERSION = 3;
+	var DEFAULT_OUTPUT_DIRECTORY = "{source}{variant}/{date}";
 
 	var sourceGroups = [
 		{
@@ -97,6 +97,11 @@ $(function() {
 
 		// Version 1 defaulted to a new {timestamp} folder per download; move those to per-source folders
 		if((settings.version || 1) < 2 && settings["#output-directory-box"] === "{timestamp}") {
+			delete settings["#output-directory-box"];
+		}
+
+		// Version 2 saved the plain per-source folder as the default; add the day folder to it
+		if((settings.version || 1) < 3 && settings["#output-directory-box"] === "{source}{variant}") {
 			delete settings["#output-directory-box"];
 		}
 
@@ -1148,7 +1153,15 @@ $(function() {
 	function resolveOutputDirectory() {
 		return $("#output-directory-box").val()
 			.split("{source}").join(getSourceSlug())
-			.split("{variant}").join(getVariant());
+			.split("{variant}").join(getVariant())
+			.split("{date}").join(getToday());
+	}
+
+	// Local calendar date as YYYY-MM-DD, so downloads are grouped by the day they were made
+	function getToday() {
+		var now = new Date();
+		var pad = function(n) { return (n < 10 ? "0" : "") + n; };
+		return now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
 	}
 
 	function updateOutputPreview() {

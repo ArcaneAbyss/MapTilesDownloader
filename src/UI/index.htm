@@ -155,9 +155,9 @@
 							<span class='helper-text'>Builds each tile from sharper, deeper-zoom imagery, then downsizes it. 4× fetches 16 source tiles per tile and sets the zoom interval to every 3rd level. Best for satellite; labels on road maps shrink to unreadable.</span>
 						</div>
 						<div class='input-field'>
-							<input id='output-directory-box' type='text' value='{source}{variant}' spellcheck='false'>
+							<input id='output-directory-box' type='text' value='{source}{variant}/{date}' spellcheck='false'>
 							<label for='output-directory-box' class='active'>Output directory</label>
-							<span class='helper-text'>{source} is the provider, {variant} marks 2x scale or supersampling, {timestamp} makes a new folder per download.</span>
+							<span class='helper-text'>{source} is the provider, {variant} marks 2x scale or supersampling, {date} is today (YYYY-MM-DD), {timestamp} makes a new folder per download.</span>
 						</div>
 						<div class='input-field'>
 							<input id='output-file-box' type='text' value='{z}/{x}/{y}.jpg' spellcheck='false'>

@@ -17,7 +17,7 @@ cd src
 python server.py
 ```
 
-Then open up your web browser and navigate to `http://localhost:8080`. The output map tiles will be in the `src/output/{timestamp}/` directory by default.
+Then open up your web browser and navigate to `http://localhost:8080`. The output map tiles will be in the `src/output/{source}/{date}/` directory by default.
 
 ## Requirements
 
@@ -119,19 +119,21 @@ Set **From** and **To** to the same value to download only that level. Set a ran
 
 ## Output
 
-Tiles are saved in one folder per tile source, in `{z}/{x}/{y}.jpg` structure:
+Tiles are saved in one folder per tile source, then one folder per day, in `{z}/{x}/{y}.jpg` structure:
 
 ```
 src/output/
-  esri-world-imagery/          zoom levels from every ESRI download, plus metadata.json
+  esri-world-imagery/
+    2026-10-05/                everything downloaded from ESRI that day
+    2026-10-06/
   esri-world-imagery_ss4x/     the same source with 4× supersampling
   bing-maps-satellite_512px/   Bing at 2x output scale
   tiles.example.com/           a custom URL, named after its host
 ```
 
-Downloading more zoom levels or a neighbouring area from the same source adds to its folder, and tiles you already have are skipped instead of downloaded again. Tiles made with a different output scale or supersample setting go to their own folder so they never get mixed up. Each folder's `metadata.json` records the source URL and the combined bounds and zoom range of everything in it. The sidebar shows the destination folder before you download.
+Downloading more zoom levels or a neighbouring area from the same source on the same day adds to that day's folder, and tiles you already have there are skipped instead of downloaded again; a new day starts a fresh folder. Tiles made with a different output scale or supersample setting go to their own folder so they never get mixed up. The sidebar shows the destination folder before you download.
 
-The folder name comes from **Output options → Output directory**, which defaults to `{source}{variant}`. `{source}` is the provider name, `{variant}` marks the output scale and supersampling, and `{timestamp}` gives each download a fresh folder if you prefer that. The UI remembers your last-used source, zoom and output settings.
+The folder name comes from **Output options → Output directory**, which defaults to `{source}{variant}/{date}`. `{source}` is the provider name, `{variant}` marks the output scale and supersampling, `{date}` is today as YYYY-MM-DD, and `{timestamp}` gives each download a fresh folder if you prefer that. The UI remembers your last-used source, zoom and output settings.
 
 ## Rate Limiting
 
